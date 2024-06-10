@@ -9,8 +9,6 @@ import auth
 class Lotto645Mode(Enum):
     AUTO = 1
     MANUAL = 2
-    BUY = 10 
-    CHECK = 20
 
 class Lotto645:
     _REQ_HEADERS = {
@@ -42,11 +40,10 @@ class Lotto645:
         headers = self._generate_req_headers(auth_ctrl)
         requirements = self._get_requirements(headers)
 
-        data = []
-        if auto_cnt > 0:
-            data += self._generate_body_for_auto_mode(auto_cnt, requirements)
-        if manual_cnt > 0:
-            data += self._generate_body_for_manual(manual_cnt, manual_numbers, requirements)
+        data_auto = self._generate_body_for_auto_mode(auto_cnt, requirements) if auto_cnt > 0 else []
+        data_manual = self._generate_body_for_manual(manual_cnt, manual_numbers, requirements) if manual_cnt > 0 else []
+
+        data = data_auto + data_manual
 
         body = self._try_buying(headers, data)
         self._show_result(body)
@@ -60,38 +57,34 @@ class Lotto645:
         assert type(cnt) == int and 1 <= cnt <= 5
 
         SLOTS = ["A", "B", "C", "D", "E"]
-        return [
-            {
-                "round": self._get_round(),
-                "direct": requirements[0],
-                "nBuyAmount": str(1000 * cnt),
-                "param": json.dumps(
-                    [{"genType": "0", "arrGameChoiceNum": None, "alpabet": slot} for slot in SLOTS[:cnt]]
-                ),
-                'ROUND_DRAW_DATE': requirements[1],
-                'WAMT_PAY_TLMT_END_DT': requirements[2],
-                "gameCnt": cnt
-            }
-        ]
+        return [{
+            "round": self._get_round(),
+            "direct": requirements[0],
+            "nBuyAmount": str(1000 * cnt),
+            "param": json.dumps(
+                [{"genType": "0", "arrGameChoiceNum": None, "alpabet": slot} for slot in SLOTS[:cnt]]
+            ),
+            'ROUND_DRAW_DATE': requirements[1],
+            'WAMT_PAY_TLMT_END_DT': requirements[2],
+            "gameCnt": cnt
+        }]
 
     def _generate_body_for_manual(self, cnt: int, manual_numbers: list, requirements: list) -> list:
         assert type(cnt) == int and 1 <= cnt <= 5
         assert type(manual_numbers) == list and len(manual_numbers) == cnt
 
         SLOTS = ["A", "B", "C", "D", "E"]
-        return [
-            {
-                "round": self._get_round(),
-                "direct": requirements[0],
-                "nBuyAmount": str(1000 * cnt),
-                "param": json.dumps(
-                    [{"genType": "1", "arrGameChoiceNum": num, "alpabet": slot} for num, slot in zip(manual_numbers, SLOTS[:cnt])]
-                ),
-                'ROUND_DRAW_DATE': requirements[1],
-                'WAMT_PAY_TLMT_END_DT': requirements[2],
-                "gameCnt": cnt
-            }
-        ]
+        return [{
+            "round": self._get_round(),
+            "direct": requirements[0],
+            "nBuyAmount": str(1000 * cnt),
+            "param": json.dumps(
+                [{"genType": "1", "arrGameChoiceNum": num, "alpabet": slot} for num, slot in zip(manual_numbers, SLOTS[:cnt])]
+            ),
+            'ROUND_DRAW_DATE': requirements[1],
+            'WAMT_PAY_TLMT_END_DT': requirements[2],
+            "gameCnt": cnt
+        }]
 
     def _get_requirements(self, headers: dict) -> list:
         assert type(headers) == dict
