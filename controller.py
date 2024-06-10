@@ -7,6 +7,7 @@ import lotto645
 import win720
 import notification
 
+load_dotenv()
 
 def buy_lotto645(authCtrl: auth.AuthController, cnt: int, mode: str):
     lotto = lotto645.Lotto645()
@@ -20,9 +21,9 @@ def check_winning_lotto645(authCtrl: auth.AuthController) -> dict:
     item = lotto.check_winning(authCtrl)
     return item
 
-def buy_win720(authCtrl: auth.AuthController):
+def buy_win720(authCtrl: auth.AuthController, cnt: int):
     pension = win720.Win720()
-    response = pension.buy_Win720(authCtrl)
+    response = pension.buy_Win720(authCtrl, cnt)
     response['balance'] = pension.get_balance(auth_ctrl=authCtrl)
     return response
 
@@ -31,66 +32,92 @@ def check_winning_win720(authCtrl: auth.AuthController) -> dict:
     item = pension.check_winning(authCtrl)
     return item
 
-def send_message(mode: int, lottery_type: int, response: dict, webhook_url: str):
+def send_message(mode: int, lottery_type: int, response: dict, email_to: str):
     notify = notification.Notification()
 
     if mode == 0:
         if lottery_type == 0:
-            notify.send_lotto_winning_message(response, webhook_url)
+            notify.send_lotto_winning_message(response, email_to)
         else:
-            notify.send_win720_winning_message(response, webhook_url)
-    elif mode == 1: 
+            notify.send_win720_winning_message(response, email_to)
+    elif mode == 1:
         if lottery_type == 0:
-            notify.send_lotto_buying_message(response, webhook_url)
+            notify.send_lotto_buying_message(response, email_to)
         else:
-            notify.send_win720_buying_message(response, webhook_url)
+            notify.send_win720_buying_message(response, email_to)
+    
+    # Send email on failure
+    if response.get('result', {}).get('resultMsg', 'SUCCESS').upper() != 'SUCCESS':
+        subject = "구매 실패 알림"
+        message = f"구매 실패: {response.get('result', {}).get('resultMsg', '')}"
+        notify._send_email(email_to.split(','), subject, message)
 
-def check():
-    load_dotenv()
+def get_credentials_and_email(username_key):
+    username = os.environ.get(username_key)
+    password = os.environ.get(f'PASSWORD{username_key[-1]}')
+    email_to = os.environ.get(f'EMAIL_TO{username_key[-1]}')
+    return username, password, email_to
 
-    username = os.environ.get('USERNAME')
-    password = os.environ.get('PASSWORD')
-    slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL') 
-    discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
+def check(username_key='USERNAME1'):
+    username, password, email_to = get_credentials_and_email(username_key)
+    if not username or not password or not email_to:
+        print(f"Missing configuration for {username_key}")
+        return
 
     globalAuthCtrl = auth.AuthController()
-    globalAuthCtrl.login(username, password)
+    try:
+        globalAuthCtrl.login(username, password)
+    except Exception as e:
+        print(e)
+        return
+
     response = check_winning_lotto645(globalAuthCtrl)
-    send_message(0, 0, response=response, webhook_url=discord_webhook_url)
+    send_message(0, 0, response=response, email_to=email_to)
 
     response = check_winning_win720(globalAuthCtrl)
-    send_message(0, 1, response=response, webhook_url=discord_webhook_url)
+    send_message(0, 1, response=response, email_to=email_to)
 
-def buy(): 
-    
-    load_dotenv() 
+def buy(username_key='USERNAME1', lottery_type='both', count=1): 
+    username, password, email_to = get_credentials_and_email(username_key)
+    if not username or not password or not email_to:
+        print(f"Missing configuration for {username_key}")
+        return
 
-    username = os.environ.get('USERNAME')
-    password = os.environ.get('PASSWORD')
-    count = int(os.environ.get('COUNT'))
-    slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL') 
-    discord_webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
+    if count < 1 or count > 5:
+        print("Count must be between 1 and 5")
+        return
+
     mode = "AUTO"
 
     globalAuthCtrl = auth.AuthController()
-    globalAuthCtrl.login(username, password)
-
-    response = buy_lotto645(globalAuthCtrl, count, mode) 
-    send_message(1, 0, response=response, webhook_url=discord_webhook_url)
-
-    response = buy_win720(globalAuthCtrl) 
-    send_message(1, 1, response=response, webhook_url=discord_webhook_url)
-
-def run():
-    if len(sys.argv) < 2:
-        print("Usage: python controller.py [buy|check]")
+    try:
+        globalAuthCtrl.login(username, password)
+    except Exception as e:
+        print(e)
         return
 
-    if sys.argv[1] == "buy":
-        buy()
-    elif sys.argv[1] == "check":
-        check()
-  
+    if lottery_type in ['lotto', 'both']:
+        response = buy_lotto645(globalAuthCtrl, count, mode)
+        send_message(1, 0, response=response, email_to=email_to)
+
+    if lottery_type in ['win720', 'both']:
+        response = buy_win720(globalAuthCtrl, count)
+        send_message(1, 1, response=response, email_to=email_to)
+
+def run():
+    if len(sys.argv) < 4:
+        print("Usage: python controller.py [buy|check] [username1|username2] [lotto|win720|both] [count]")
+        return
+
+    command = sys.argv[1]
+    username_key = sys.argv[2].upper()
+    lottery_type = sys.argv[3].lower()
+    count = int(sys.argv[4])
+
+    if command == "buy":
+        buy(username_key, lottery_type, count)
+    elif command == "check":
+        check(username_key)
 
 if __name__ == "__main__":
     run()
