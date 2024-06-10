@@ -9,11 +9,53 @@ import notification
 
 load_dotenv()
 
+def get_credentials_and_email(username_key):
+    username = os.environ.get(username_key)
+    password = os.environ.get(f'PASSWORD{username_key[-1]}')
+    email_to = os.environ.get(f'EMAIL_TO{username_key[-1]}')
+    return username, password, email_to
+
 def buy_lotto645(authCtrl: auth.AuthController, auto_cnt: int, manual_cnt: int, manual_numbers: list = None):
     lotto = lotto645.Lotto645()
     response = lotto.buy_lotto645(authCtrl, auto_cnt, manual_cnt, manual_numbers)
     response['balance'] = lotto.get_balance(auth_ctrl=authCtrl)
     return response
+
+def check_winning_lotto645(authCtrl: auth.AuthController) -> dict:
+    lotto = lotto645.Lotto645()
+    item = lotto.check_winning(authCtrl)
+    return item
+
+def buy_win720(authCtrl: auth.AuthController, cnt: int):
+    pension = win720.Win720()
+    response = pension.buy_Win720(authCtrl, cnt)
+    response['balance'] = pension.get_balance(auth_ctrl=authCtrl)
+    return response
+
+def check_winning_win720(authCtrl: auth.AuthController) -> dict:
+    pension = win720.Win720()
+    item = pension.check_winning(authCtrl)
+    return item
+
+def send_message(mode: int, lottery_type: int, response: dict, email_to: str):
+    notify = notification.Notification()
+
+    if mode == 0:
+        if lottery_type == 0:
+            notify.send_lotto_winning_message(response, email_to)
+        else:
+            notify.send_win720_winning_message(response, email_to)
+    elif mode == 1:
+        if lottery_type == 0:
+            notify.send_lotto_buying_message(response, email_to)
+        else:
+            notify.send_win720_buying_message(response, email_to)
+
+    # Send email on failure
+    if response.get('result', {}).get('resultMsg', 'SUCCESS').upper() != 'SUCCESS':
+        subject = "구매 실패 알림"
+        message = f"구매 실패: {response.get('result', {}).get('resultMsg', '')}"
+        notify._send_email(email_to.split(','), subject, message)
 
 def check(username_key='USERNAME1'):
     username, password, email_to = get_credentials_and_email(username_key)
