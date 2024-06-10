@@ -45,7 +45,7 @@ def send_message(mode: int, lottery_type: int, response: dict, email_to: str):
             notify.send_lotto_buying_message(response, email_to)
         else:
             notify.send_win720_buying_message(response, email_to)
-    
+
     # Send email on failure
     if response.get('result', {}).get('resultMsg', 'SUCCESS').upper() != 'SUCCESS':
         subject = "구매 실패 알림"
@@ -77,7 +77,7 @@ def check(username_key='USERNAME1'):
     response = check_winning_win720(globalAuthCtrl)
     send_message(0, 1, response=response, email_to=email_to)
 
-def buy(username_key='USERNAME1', lottery_type='both', count=1): 
+def buy(username_key='USERNAME1', lottery_type='both', count=1):
     username, password, email_to = get_credentials_and_email(username_key)
     if not username or not password or not email_to:
         print(f"Missing configuration for {username_key}")
