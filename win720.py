@@ -1,28 +1,9 @@
 import json
-import datetime
 import requests
-import base64
-
-from enum import Enum
 from bs4 import BeautifulSoup as BS
-from datetime import timedelta
-from Crypto.Cipher import AES
-from Crypto.Protocol.KDF import PBKDF2
-from Crypto.Hash import SHA256
-from Crypto.Random import get_random_bytes
-
 import auth
 
 class Win720:
-
-    keySize = 128
-    iterationCount = 1000
-    BlockSize = 16
-    keyCode = ""
-
-    _pad = lambda self, s: s + (self.BlockSize - len(s) % self.BlockSize) * chr(self.BlockSize - len(s) % self.BlockSize)
-    _unpad = lambda self, s : s[:-ord(s[len(s)-1:])]
-
     _REQ_HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
         "Connection": "keep-alive",
