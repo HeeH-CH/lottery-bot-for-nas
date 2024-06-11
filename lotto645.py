@@ -3,6 +3,7 @@ import requests
 from enum import Enum
 from bs4 import BeautifulSoup as BS
 import auth
+import notification
 
 class Lotto645Mode(Enum):
     AUTO = 1
@@ -27,6 +28,9 @@ class Lotto645:
         "Accept-Language": "ko,en-US;q=0.9,en;q=0.8,ko-KR;q=0.7",
     }
 
+    def __init__(self):
+        self.notifier = notification.Notification()
+
     def buy_lotto645(
         self, 
         auth_ctrl: auth.AuthController, 
@@ -48,7 +52,17 @@ class Lotto645:
 
         body = self._try_buying(headers, data)
 
-        self._show_result(body)
+        if body.get("resultMsg", "FAILURE").upper() != "SUCCESS":
+            error_message = f"로또 구매 실패: {body.get('resultMsg', 'Unknown Error')}"
+            print(error_message)
+            self.notifier.send_error_message(error_message, auth_ctrl.username)
+        elif float(body.get("balance", 0)) < 1000 * cnt:
+            error_message = "잔액이 부족합니다."
+            print(error_message)
+            self.notifier.send_error_message(error_message, auth_ctrl.username)
+        else:
+            self._show_result(body)
+
         return body
 
     def _generate_req_headers(self, auth_ctrl: auth.AuthController) -> dict:
