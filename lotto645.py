@@ -1,13 +1,17 @@
 import json
+import datetime
 import requests
+
 from enum import Enum
 from bs4 import BeautifulSoup as BS
+from datetime import timedelta
 import auth
-import notification
 
 class Lotto645Mode(Enum):
     AUTO = 1
     MANUAL = 2
+    BUY = 10 
+    CHECK = 20
 
 class Lotto645:
     _REQ_HEADERS = {
@@ -28,41 +32,18 @@ class Lotto645:
         "Accept-Language": "ko,en-US;q=0.9,en;q=0.8,ko-KR;q=0.7",
     }
 
-    def __init__(self):
-        self.notifier = notification.Notification()
-
-    def buy_lotto645(
-        self, 
-        auth_ctrl: auth.AuthController, 
-        cnt: int, 
-        mode: Lotto645Mode, 
-        manual_numbers: list = None
-    ) -> dict:
+    def buy_lotto645(self, auth_ctrl: auth.AuthController, cnt: int, mode: Lotto645Mode) -> dict:
         assert type(auth_ctrl) == auth.AuthController
         assert type(cnt) == int and 1 <= cnt <= 5
         assert type(mode) == Lotto645Mode
 
         headers = self._generate_req_headers(auth_ctrl)
-        requirements = self._getRequirements(headers)
+        requirements = self._get_requirements(headers)
 
-        if mode == Lotto645Mode.AUTO:
-            data = self._generate_body_for_auto_mode(cnt, requirements)
-        else:
-            data = self._generate_body_for_manual(cnt, manual_numbers)
+        data = self._generate_body_for_auto_mode(cnt, requirements) if mode == Lotto645Mode.AUTO else self._generate_body_for_manual(cnt)
 
         body = self._try_buying(headers, data)
-
-        if body.get("resultMsg", "FAILURE").upper() != "SUCCESS":
-            error_message = f"로또 구매 실패: {body.get('resultMsg', 'Unknown Error')}"
-            print(error_message)
-            self.notifier.send_error_message(error_message, auth_ctrl.username)
-        elif float(body.get("balance", 0)) < 1000 * cnt:
-            error_message = "잔액이 부족합니다."
-            print(error_message)
-            self.notifier.send_error_message(error_message, auth_ctrl.username)
-        else:
-            self._show_result(body)
-
+        self._show_result(body)
         return body
 
     def _generate_req_headers(self, auth_ctrl: auth.AuthController) -> dict:
@@ -71,65 +52,35 @@ class Lotto645:
 
     def _generate_body_for_auto_mode(self, cnt: int, requirements: list) -> dict:
         assert type(cnt) == int and 1 <= cnt <= 5
-
         SLOTS = ["A", "B", "C", "D", "E"]
-
         return {
             "round": self._get_round(),
-            "direct": requirements[0],  
+            "direct": requirements[0],
             "nBuyAmount": str(1000 * cnt),
             "param": json.dumps(
-                [
-                    {"genType": "0", "arrGameChoiceNum": None, "alpabet": slot}
-                    for slot in SLOTS[:cnt]
-                ]
+                [{"genType": "0", "arrGameChoiceNum": None, "alpabet": slot} for slot in SLOTS[:cnt]]
             ),
             'ROUND_DRAW_DATE': requirements[1],
             'WAMT_PAY_TLMT_END_DT': requirements[2],
             "gameCnt": cnt
         }
 
-    def _generate_body_for_manual(self, cnt: int, manual_numbers: list) -> dict:
+    def _generate_body_for_manual(self, cnt: int) -> dict:
         assert type(cnt) == int and 1 <= cnt <= 5
-        assert type(manual_numbers) == list and len(manual_numbers) == cnt
+        raise NotImplementedError("Manual mode is not implemented yet.")
 
-        SLOTS = ["A", "B", "C", "D", "E"]
-
-        return {
-            "round": self._get_round(),
-            "direct": "Direct",  
-            "nBuyAmount": str(1000 * cnt),
-            "param": json.dumps(
-                [
-                    {"genType": "1", "arrGameChoiceNum": manual_numbers[i], "alpabet": SLOTS[i]}
-                    for i in range(cnt)
-                ]
-            ),
-            'ROUND_DRAW_DATE': self._get_draw_date(),
-            'WAMT_PAY_TLMT_END_DT': self._get_tlmt_date(),
-            "gameCnt": cnt
-        }
-
-    def _getRequirements(self, headers: dict) -> list:
-        org_headers = headers
+    def _get_requirements(self, headers: dict) -> list:
+        assert type(headers) == dict
 
         headers["Referer"] = "https://ol.dhlottery.co.kr/olotto/game/game645.do"
         headers["Content-Type"] = "application/json; charset=UTF-8"
         headers["X-Requested-With"] = "XMLHttpRequest"
 
-        res = requests.post(
-            url="https://ol.dhlottery.co.kr/olotto/game/egovUserReadySocket.json", 
-            headers=headers
-        )
-        
+        res = requests.post("https://ol.dhlottery.co.kr/olotto/game/egovUserReadySocket.json", headers=headers)
         direct = json.loads(res.text)["ready_ip"]
 
-        res = requests.post(
-            url="https://ol.dhlottery.co.kr/olotto/game/game645.do", 
-            headers=org_headers
-        )
-        html = res.text
-        soup = BS(html, "html5lib")
+        res = requests.post("https://ol.dhlottery.co.kr/olotto/game/game645.do", headers=headers)
+        soup = BS(res.text, "html5lib")
         draw_date = soup.find("input", id="ROUND_DRAW_DATE").get('value')
         tlmt_date = soup.find("input", id="WAMT_PAY_TLMT_END_DT").get('value')
 
@@ -137,34 +88,23 @@ class Lotto645:
 
     def _get_round(self) -> str:
         res = requests.get("https://www.dhlottery.co.kr/common.do?method=main")
-        html = res.text
-        soup = BS(html, "html5lib")
+        soup = BS(res.text, "html5lib")
         last_drawn_round = int(soup.find("strong", id="lottoDrwNo").text)
         return str(last_drawn_round + 1)
 
     def get_balance(self, auth_ctrl: auth.AuthController) -> str:
         headers = self._generate_req_headers(auth_ctrl)
-        res = requests.post(
-            url="https://dhlottery.co.kr/userSsl.do?method=myPage", 
-            headers=headers
-        )
-
-        html = res.text
-        soup = BS(html, "html5lib")
+        res = requests.post("https://dhlottery.co.kr/userSsl.do?method=myPage", headers=headers)
+        soup = BS(res.text, "html5lib")
         balance = soup.find("p", class_="total_new").find('strong').text
         return balance
-        
+
     def _try_buying(self, headers: dict, data: dict) -> dict:
         assert type(headers) == dict
         assert type(data) == dict
 
-        headers["Content-Type"]  = "application/x-www-form-urlencoded; charset=UTF-8"
-
-        res = requests.post(
-            "https://ol.dhlottery.co.kr/olotto/game/execBuy.do",
-            headers=headers,
-            data=data,
-        )
+        headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
+        res = requests.post("https://ol.dhlottery.co.kr/olotto/game/execBuy.do", headers=headers, data=data)
         res.encoding = "utf-8"
         return json.loads(res.text)
 
@@ -172,49 +112,33 @@ class Lotto645:
         assert type(auth_ctrl) == auth.AuthController
 
         headers = self._generate_req_headers(auth_ctrl)
-
         parameters = self._make_search_date()
 
         data = {
-            "nowPage": 1, 
+            "nowPage": 1,
             "searchStartDate": parameters["searchStartDate"],
             "searchEndDate": parameters["searchEndDate"],
             "winGrade": 1,
-            "lottoId": "LO40", 
+            "lottoId": "LO40",
             "sortOrder": "DESC"
         }
 
-        res = requests.post(
-            "https://dhlottery.co.kr/myPage.do?method=lottoBuyList",
-            headers=headers,
-            data=data
-        )
+        res = requests.post("https://dhlottery.co.kr/myPage.do?method=lottoBuyList", headers=headers, data=data)
+        soup = BS(res.text, "html5lib")
 
-        html = res.text
-        soup = BS(html, "html5lib")
-        
-        winnings = soup.find("table", class_="tbl_data tbl_data_col").find_all("tbody")[0].find_all("td")        
-
-        result_data = {
-            "data": "no winning data"
-        }
-        
+        winnings = soup.find("table", class_="tbl_data tbl_data_col").find("tbody").find_all("td")
         if len(winnings) == 1:
-            return result_data
-            
+            return {"data": "no winning data"}
 
-        result_data = {
+        return {
             "round": winnings[2].text.strip(),
             "money": winnings[6].text.strip(),
             "purchased_date": winnings[0].text.strip(),
             "winning_date": winnings[7].text.strip()
         }
 
-        return result_data
-    
     def _make_search_date(self) -> dict:
-        from datetime import datetime, timedelta
-        today = datetime.today()
+        today = datetime.datetime.today()
         today_str = today.strftime("%Y%m%d")
         weekago = today - timedelta(days=7)
         weekago_str = weekago.strftime("%Y%m%d")
@@ -225,10 +149,12 @@ class Lotto645:
 
     def _show_result(self, body: dict) -> None:
         assert type(body) == dict
-
         if body.get("loginYn") != "Y":
+            print("Login failed.")
             return
 
         result = body.get("result", {})
-        if result.get("resultMsg", "FAILURE").upper() != "SUCCESS":
-            return
+        if result.get("resultMsg", "FAILURE").upper() == "SUCCESS":
+            print("Purchase successful.")
+        else:
+            print("Purchase failed: " + result.get("resultMsg", "Unknown error"))
