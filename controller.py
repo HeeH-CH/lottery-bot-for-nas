@@ -1,122 +1,110 @@
 import os
 import sys
 from dotenv import load_dotenv
-
 import auth
 import lotto645
 import win720
 import notification
 
-load_dotenv()
-
-def get_credentials_and_email(username_key):
-    username = os.environ.get(username_key)
-    password = os.environ.get(f'PASSWORD{username_key[-1]}')
-    email_to = os.environ.get(f'EMAIL_TO{username_key[-1]}')
-    return username, password, email_to
-
-def buy_lotto645(authCtrl: auth.AuthController, auto_cnt: int, manual_cnt: int, manual_numbers: list = None):
+def buy_lotto645(auth_ctrl, cnt, mode, numbers=None):
     lotto = lotto645.Lotto645()
-    response = lotto.buy_lotto645(authCtrl, auto_cnt, manual_cnt, manual_numbers)
-    response['balance'] = lotto.get_balance(auth_ctrl=authCtrl)
+    _mode = lotto645.Lotto645Mode[mode.upper()]
+    response = lotto.buy_lotto645(auth_ctrl, cnt, _mode, numbers)
+    response['balance'] = lotto.get_balance(auth_ctrl=auth_ctrl)
     return response
 
-def check_winning_lotto645(authCtrl: auth.AuthController) -> dict:
+def check_winning_lotto645(auth_ctrl):
     lotto = lotto645.Lotto645()
-    item = lotto.check_winning(authCtrl)
-    return item
+    return lotto.check_winning(auth_ctrl)
 
-def buy_win720(authCtrl: auth.AuthController, cnt: int):
+def buy_win720(auth_ctrl):
     pension = win720.Win720()
-    response = pension.buy_Win720(authCtrl, cnt)
-    response['balance'] = pension.get_balance(auth_ctrl=authCtrl)
+    response = pension.buy_Win720(auth_ctrl)
+    response['balance'] = pension.get_balance(auth_ctrl=auth_ctrl)
     return response
 
-def check_winning_win720(authCtrl: auth.AuthController) -> dict:
+def check_winning_win720(auth_ctrl):
     pension = win720.Win720()
-    item = pension.check_winning(authCtrl)
-    return item
+    return pension.check_winning(auth_ctrl)
 
-def send_message(mode: int, lottery_type: int, response: dict, email_to: str):
+def send_message(notification_type, lottery_type, response, to_email):
     notify = notification.Notification()
 
-    if mode == 0:
-        if lottery_type == 0:
-            notify.send_lotto_winning_message(response, email_to)
-        else:
-            notify.send_win720_winning_message(response, email_to)
-    elif mode == 1:
-        if lottery_type == 0:
-            notify.send_lotto_buying_message(response, email_to)
-        else:
-            notify.send_win720_buying_message(response, email_to)
+    if notification_type == 'buy':
+        if lottery_type == 'lotto':
+            notify.send_lotto_buying_message(response, to_email)
+        elif lottery_type == 'win720':
+            notify.send_win720_buying_message(response, to_email)
+    elif notification_type == 'win':
+        if lottery_type == 'lotto':
+            notify.send_lotto_winning_message(response, to_email)
+        elif lottery_type == 'win720':
+            notify.send_win720_winning_message(response, to_email)
 
-    # Send email on failure
-    if response.get('result', {}).get('resultMsg', 'SUCCESS').upper() != 'SUCCESS':
-        subject = "구매 실패 알림"
-        message = f"구매 실패: {response.get('result', {}).get('resultMsg', '')}"
-        notify._send_email(email_to.split(','), subject, message)
+def check_and_send_results():
+    load_dotenv()
 
-def check(username_key='USERNAME1'):
-    username, password, email_to = get_credentials_and_email(username_key)
-    if not username or not password or not email_to:
-        print(f"Missing configuration for {username_key}")
-        return
+    auth_ctrl1 = auth.AuthController()
+    auth_ctrl2 = auth.AuthController()
 
-    globalAuthCtrl = auth.AuthController()
-    try:
-        globalAuthCtrl.login(username, password)
-    except Exception as e:
-        print(e)
-        return
+    auth_ctrl1.login(os.getenv('USERNAME1'), os.getenv('PASSWORD1'))
+    auth_ctrl2.login(os.getenv('USERNAME2'), os.getenv('PASSWORD2'))
 
-    response = check_winning_lotto645(globalAuthCtrl)
-    send_message(0, 0, response=response, email_to=email_to)
+    to_email1 = os.getenv('USERNAME1')
+    to_email2 = os.getenv('USERNAME2')
 
-    response = check_winning_win720(globalAuthCtrl)
-    send_message(0, 1, response=response, email_to=email_to)
+    # 로또 당첨 확인
+    result = check_winning_lotto645(auth_ctrl1)
+    send_message('win', 'lotto', result, to_email1)
 
-def buy(username_key='USERNAME1', lottery_type='both', auto_count=0, manual_count=0, manual_numbers=None):
-    username, password, email_to = get_credentials_and_email(username_key)
-    if not username or not password or not email_to:
-        print(f"Missing configuration for {username_key}")
-        return
+    result = check_winning_lotto645(auth_ctrl2)
+    send_message('win', 'lotto', result, to_email2)
 
-    if auto_count + manual_count < 1 or auto_count + manual_count > 5:
-        print("Total count must be between 1 and 5")
-        return
+    # 연금복권 당첨 확인
+    result = check_winning_win720(auth_ctrl1)
+    send_message('win', 'win720', result, to_email1)
 
-    globalAuthCtrl = auth.AuthController()
-    try:
-        globalAuthCtrl.login(username, password)
-    except Exception as e:
-        print(e)
-        return
+    result = check_winning_win720(auth_ctrl2)
+    send_message('win', 'win720', result, to_email2)
 
-    if lottery_type in ['lotto', 'both']:
-        response = buy_lotto645(globalAuthCtrl, auto_count, manual_count, manual_numbers)
-        send_message(1, 0, response=response, email_to=email_to)
+def buy_and_send_results():
+    load_dotenv()
 
-    if lottery_type in ['win720', 'both']:
-        response = buy_win720(globalAuthCtrl, auto_count + manual_count)  # 연금복권의 경우 개수만 넘김
-        send_message(1, 1, response=response, email_to=email_to)
+    auth_ctrl1 = auth.AuthController()
+    auth_ctrl2 = auth.AuthController()
+
+    auth_ctrl1.login(os.getenv('USERNAME1'), os.getenv('PASSWORD1'))
+    auth_ctrl2.login(os.getenv('USERNAME2'), os.getenv('PASSWORD2'))
+
+    to_email1 = os.getenv('USERNAME1')
+    to_email2 = os.getenv('USERNAME2')
+
+    count = int(os.getenv('COUNT'))
+    mode = os.getenv('MODE')
+
+    # 로또 구매
+    response = buy_lotto645(auth_ctrl1, count, mode)
+    send_message('buy', 'lotto', response, to_email1)
+
+    response = buy_lotto645(auth_ctrl2, count, mode)
+    send_message('buy', 'lotto', response, to_email2)
+
+    # 연금복권 구매
+    response = buy_win720(auth_ctrl1)
+    send_message('buy', 'win720', response, to_email1)
+
+    response = buy_win720(auth_ctrl2)
+    send_message('buy', 'win720', response, to_email2)
 
 def run():
-    if len(sys.argv) < 5:
-        print("Usage: python controller.py [buy|check] [username1|username2] [lotto|win720|both] [auto_count] [manual_count] [manual_numbers]")
+    if len(sys.argv) < 2:
+        print("Usage: python controller.py [buy|check]")
         return
 
-    command = sys.argv[1]
-    username_key = sys.argv[2].upper()
-    lottery_type = sys.argv[3].lower()
-    auto_count = int(sys.argv[4])
-    manual_count = int(sys.argv[5])
-    manual_numbers = sys.argv[6:] if len(sys.argv) > 6 else None
-
-    if command == "buy":
-        buy(username_key, lottery_type, auto_count, manual_count, manual_numbers)
-    elif command == "check":
-        check(username_key)
+    if sys.argv[1] == "buy":
+        buy_and_send_results()
+    elif sys.argv[1] == "check":
+        check_and_send_results()
 
 if __name__ == "__main__":
     run()
