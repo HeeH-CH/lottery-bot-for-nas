@@ -3,6 +3,22 @@
 동행복권 사이트내에 계정에 예치금만 넣어두시면 이후 매주 로또를 구입하고 당첨을 체크하여 알려드려요!  
 
 # export로 환경변수 등록 했습니다
+```
+# User
+USERNAME1=your_username1
+PASSWORD1=abc0!
+EMAIL_TO1=recipient1@example.com
+
+USERNAME2=your_username2
+PASSWORD2=abc0!!
+EMAIL_TO2=recipient2@example.com
+
+# Email
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=your_email@gmail.com
+EMAIL_HOST_PASSWORD=your_email_password
+```
 
 # 명령어
 
