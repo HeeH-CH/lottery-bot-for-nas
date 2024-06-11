@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 
 import auth
 import lotto645
-import win720
 import notification
 
 load_dotenv()
@@ -21,30 +20,13 @@ def check_winning_lotto645(authCtrl: auth.AuthController) -> dict:
     item = lotto.check_winning(authCtrl)
     return item
 
-def buy_win720(authCtrl: auth.AuthController, cnt: int):
-    pension = win720.Win720()
-    response = pension.buy_Win720(authCtrl, cnt)
-    response['balance'] = pension.get_balance(auth_ctrl=authCtrl)
-    return response
-
-def check_winning_win720(authCtrl: auth.AuthController) -> dict:
-    pension = win720.Win720()
-    item = pension.check_winning(authCtrl)
-    return item
-
 def send_message(mode: int, lottery_type: int, response: dict, email_to: str):
     notify = notification.Notification()
 
     if mode == 0:
-        if lottery_type == 0:
-            notify.send_lotto_winning_message(response, email_to)
-        else:
-            notify.send_win720_winning_message(response, email_to)
+        notify.send_lotto_winning_message(response, email_to)
     elif mode == 1:
-        if lottery_type == 0:
-            notify.send_lotto_buying_message(response, email_to)
-        else:
-            notify.send_win720_buying_message(response, email_to)
+        notify.send_lotto_buying_message(response, email_to)
     
     # Send email on failure
     if response.get('result', {}).get('resultMsg', 'SUCCESS').upper() != 'SUCCESS':
@@ -74,10 +56,7 @@ def check(username_key='USERNAME1'):
     response = check_winning_lotto645(globalAuthCtrl)
     send_message(0, 0, response=response, email_to=email_to)
 
-    response = check_winning_win720(globalAuthCtrl)
-    send_message(0, 1, response=response, email_to=email_to)
-
-def buy(username_key='USERNAME1', lottery_type='both', count=1): 
+def buy(username_key='USERNAME1', count=1): 
     username, password, email_to = get_credentials_and_email(username_key)
     if not username or not password or not email_to:
         print(f"Missing configuration for {username_key}")
@@ -96,26 +75,23 @@ def buy(username_key='USERNAME1', lottery_type='both', count=1):
         print(e)
         return
 
-    if lottery_type in ['lotto', 'both']:
-        response = buy_lotto645(globalAuthCtrl, count, mode)
-        send_message(1, 0, response=response, email_to=email_to)
-
-    if lottery_type in ['win720', 'both']:
-        response = buy_win720(globalAuthCtrl, count)
-        send_message(1, 1, response=response, email_to=email_to)
+    response = buy_lotto645(globalAuthCtrl, count, mode)
+    send_message(1, 0, response=response, email_to=email_to)
 
 def run():
-    if len(sys.argv) < 4:
-        print("Usage: python controller.py [buy|check] [username1|username2] [lotto|win720|both] [count]")
+    if len(sys.argv) < 3:
+        print("Usage: python controller.py [buy|check] [username1|username2] [count]")
         return
 
     command = sys.argv[1]
     username_key = sys.argv[2].upper()
-    lottery_type = sys.argv[3].lower()
-    count = int(sys.argv[4])
 
     if command == "buy":
-        buy(username_key, lottery_type, count)
+        if len(sys.argv) < 4:
+            print("Usage: python controller.py buy [username1|username2] [count]")
+            return
+        count = int(sys.argv[3])
+        buy(username_key, count)
     elif command == "check":
         check(username_key)
 
