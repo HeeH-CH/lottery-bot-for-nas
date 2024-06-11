@@ -24,21 +24,6 @@ class Notification:
         
         return lotto_number
 
-    def send_win720_buying_message(self, body: dict, email_to: str) -> None:
-        email_list = email_to.split(',')
-        if body.get("resultCode") == '100':
-            win720_round = body.get("resultMsg").split("|")[3]
-            win720_number_str = self.make_win720_number_message(body.get("saleTicket"))
-            subject = f"{win720_round}회 연금복권 구매 완료"
-            message = f"{win720_round}회 연금복권 구매 완료 :moneybag: 남은잔액 : {body['balance']}\n{win720_number_str}"
-        else:
-            subject = "연금복권 구매 실패"
-            message = f"연금복권 구매 실패: {body.get('resultMsg', '')}"
-        self._send_email(email_list, subject, message)
-
-    def make_win720_number_message(self, win720_number: str) -> str:
-        return "\n".join(win720_number.split(","))
-
     def send_lotto_winning_message(self, winning: dict, email_to: str) -> None:
         email_list = email_to.split(',')
         try:
@@ -46,17 +31,6 @@ class Notification:
             money = winning["money"]
             subject = f"로또 {winning['round']}회 당첨"
             message = f"로또 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 :tada:"
-            self._send_email(email_list, subject, message)
-        except KeyError:
-            return
-
-    def send_win720_winning_message(self, winning: dict, email_to: str) -> None:
-        email_list = email_to.split(',')
-        try:
-            round = winning["round"]
-            money = winning["money"]
-            subject = f"연금복권 {winning['round']}회 당첨"
-            message = f"연금복권 *{winning['round']}회* - *{winning['money']}* 당첨 되었습니다 :tada:"
             self._send_email(email_list, subject, message)
         except KeyError:
             return
