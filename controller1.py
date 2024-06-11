@@ -83,40 +83,66 @@ def buy_and_check(username_key='USERNAME1', lottery_type='both', auto_count=0, m
     # Check winning history
     winning_message = ""
     lotto_winning_response = check_winning_lotto645(globalAuthCtrl)
-    if lotto_winning_response.get("data") != "no winning data":
-        notify.send_lotto_winning_message(lotto_winning_response, email_to)
-        winning_message += f"로또 당첨 이력:\n{lotto_winning_response}\n\n"
+    if lotto_winning_response.get("data") == "no winning data":
+        winning_message += "<p>직전 회차의 로또 당첨 이력이 없습니다.</p>\n"
     else:
-        winning_message += "로또 당첨 이력이 없습니다.\n\n"
+        notify.send_lotto_winning_message(lotto_winning_response, email_to)
+        winning_message += f"<p>로또 {lotto_winning_response['round']}회 당첨 - {lotto_winning_response['money']}원 당첨 되었습니다 🎉</p>\n"
+        winning_message += f"<p>구매 날짜: {lotto_winning_response['purchased_date']}</p>\n"
+        winning_message += f"<p>당첨 날짜: {lotto_winning_response['winning_date']}</p>\n"
 
     win720_winning_response = check_winning_win720(globalAuthCtrl)
-    if win720_winning_response.get("data") != "no winning data":
-        notify.send_win720_winning_message(win720_winning_response, email_to)
-        winning_message += f"연금복권 당첨 이력:\n{win720_winning_response}\n\n"
+    if win720_winning_response.get("data") == "no winning data":
+        winning_message += "<p>직전 회차의 연금복권 당첨 이력이 없습니다.</p>\n"
     else:
-        winning_message += "연금복권 당첨 이력이 없습니다.\n\n"
+        notify.send_win720_winning_message(win720_winning_response, email_to)
+        winning_message += f"<p>연금복권 {win720_winning_response['round']}회 당첨 - {win720_winning_response['money']}원 당첨 되었습니다 🎉</p>\n"
+        winning_message += f"<p>구매 날짜: {win720_winning_response['purchased_date']}</p>\n"
+        winning_message += f"<p>당첨 날짜: {win720_winning_response['winning_date']}</p>\n"
+
+    if not winning_message:
+        winning_message = "<p>당첨 이력이 없습니다.</p>\n"
 
     # Buy lottery tickets
     buying_message = ""
     if lottery_type in ['lotto', 'both']:
         lotto_response = buy_lotto645(globalAuthCtrl, auto_count, manual_count, manual_numbers)
         notify.send_lotto_buying_message(lotto_response, email_to)
-        buying_message += f"로또 구매 이력:\n{lotto_response}\n\n"
+        buying_message += f"<p>{lotto_response['result']['buyRound']}회 로또 구매 완료 💰 남은 잔액: {lotto_response['balance']}원</p>\n"
+        for num in lotto_response['result']['arrGameChoiceNum']:
+            buying_message += f"<li>{num}</li>\n"
 
     if lottery_type in ['win720', 'both']:
         if win720_count > 0:
             win720_response = buy_win720(globalAuthCtrl, win720_count)
             notify.send_win720_buying_message(win720_response, email_to)
-            buying_message += f"연금복권 구매 이력:\n{win720_response}\n\n"
+            buying_message += f"<p>{win720_response['resultMsg'].split('|')[3]}회 연금복권 구매 완료 💰 남은 잔액: {win720_response['balance']}원</p>\n"
+            for ticket in win720_response['saleTicket'].split(','):
+                buying_message += f"<li>{ticket}</li>\n"
         else:
-            buying_message += "연금복권 구매 이력이 없습니다.\n\n"
+            buying_message += "<p>연금복권 구매 이력이 없습니다.</p>\n"
 
     if not buying_message:
-        buying_message = "구매 이력이 없습니다.\n\n"
+        buying_message = "<p>구매 이력이 없습니다.</p>\n"
 
     # Combine and send the final message
-    final_message = f"당첨 이력:\n{winning_message}\n구매 이력:\n{buying_message}"
+    final_message = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>로또 및 연금복권 구매 및 당첨 이력</title>
+    </head>
+    <body>
+        <h2>당첨 이력:</h2>
+        {winning_message}
+        <h2>구매 이력:</h2>
+        {buying_message}
+    </body>
+    </html>
+    """
     notify._send_email(email_to.split(','), "로또 및 연금복권 구매 및 당첨 이력", final_message)
+
 
 def buy(username_key='USERNAME1', lottery_type='both', auto_count=0, manual_count=0, manual_numbers=None, win720_count=0):
     username, password, email_to = get_credentials_and_email(username_key)
