@@ -1,9 +1,28 @@
 import json
+import datetime
 import requests
+import base64
+
+from enum import Enum
 from bs4 import BeautifulSoup as BS
+from datetime import timedelta
+from Crypto.Cipher import AES
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Hash import SHA256
+from Crypto.Random import get_random_bytes
+
 import auth
 
 class Win720:
+
+    keySize = 128
+    iterationCount = 1000
+    BlockSize = 16
+    keyCode = ""
+
+    _pad = lambda self, s: s + (self.BlockSize - len(s) % self.BlockSize) * chr(self.BlockSize - len(s) % self.BlockSize)
+    _unpad = lambda self, s : s[:-ord(s[len(s)-1:])]
+
     _REQ_HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
         "Connection": "keep-alive",
@@ -23,21 +42,23 @@ class Win720:
         "X-Requested-With": "XMLHttpRequest"
     }
 
-    def buy_Win720(self, auth_ctrl: auth.AuthController, cnt: int) -> dict:
+    def buy_Win720(
+        self, 
+        auth_ctrl: auth.AuthController, 
+    ) -> dict:
         assert type(auth_ctrl) == auth.AuthController
-        assert type(cnt) == int and 1 <= cnt <= 5
 
         headers = self._generate_req_headers(auth_ctrl)
 
         self.keyCode = headers['Cookie'].split("JSESSIONID=")[1]
         win720_round = self._get_round()
         
-        makeAutoNum_ret = self._makeAutoNumbers(auth_ctrl, win720_round, cnt)
+        makeAutoNum_ret = self._makeAutoNumbers(auth_ctrl, win720_round)
         parsed_ret = self._decText(json.loads(makeAutoNum_ret)['q']) 
         extracted_num = json.loads(parsed_ret)["selLotNo"]
-        orderNo, orderDate = self._doOrderRequest(auth_ctrl, win720_round, extracted_num, cnt)
+        orderNo, orderDate = self._doOrderRequest(auth_ctrl, win720_round, extracted_num)
         
-        body = json.loads(self._doConnPro(auth_ctrl, win720_round, extracted_num, orderNo, orderDate, cnt))
+        body = json.loads(self._doConnPro(auth_ctrl, win720_round, extracted_num, orderNo, orderDate))
 
         self._show_result(body)
         return body
@@ -48,36 +69,39 @@ class Win720:
 
     def _get_round(self) -> str:
         res = requests.get("https://www.dhlottery.co.kr/common.do?method=main")
-        soup = BS(res.text, "html5lib")
+        html = res.text
+        soup = BS(
+            html, "html5lib"
+        )  # 'html5lib' : in case that the html don't have clean tag pairs
         last_drawn_round = int(soup.find("strong", id="drwNo720").text)
         return str(last_drawn_round + 1)
 
-    def _makeAutoNumbers(self, auth_ctrl: auth.AuthController, win720_round: str, cnt: int) -> str:
-        payload = "ROUND={}&SEL_NO=&BUY_CNT={}&AUTO_SEL_SET=SA&SEL_CLASS=&BUY_TYPE=A&ACCS_TYPE=01".format(win720_round, cnt)
+    def _makeAutoNumbers(self, auth_ctrl: auth.AuthController, win720_round: str) -> str:
+        payload = "ROUND={}&SEL_NO=&BUY_CNT=&AUTO_SEL_SET=SA&SEL_CLASS=&BUY_TYPE=A&ACCS_TYPE=01".format(win720_round)
         headers = self._generate_req_headers(auth_ctrl)
         
         data = {
             "q": requests.utils.quote(self._encText(payload))
         }
 
-        res = requests.post(
-            url="https://el.dhlottery.co.kr/game/pension720/process/makeAutoNo.jsp",
+        res = requests.post( 
+            url="https://el.dhlottery.co.kr/game/pension720/process/makeAutoNo.jsp", 
             headers=headers,
             data=data
         )
 
         return res.text
 
-    def _doOrderRequest(self, auth_ctrl: auth.AuthController, win720_round: str, extracted_num: str, cnt: int) -> str:
-        payload = "ROUND={}&AUTO_SEL_SET=SA&SEL_CLASS=&SEL_NO={}&BUY_TYPE=M&BUY_CNT={}".format(win720_round, extracted_num, cnt)
+    def _doOrderRequest(self, auth_ctrl: auth.AuthController, win720_round: str, extracted_num: str) -> str:
+        payload = "ROUND={}&AUTO_SEL_SET=SA&SEL_CLASS=&SEL_NO={}&BUY_TYPE=M&BUY_CNT=5".format(win720_round, extracted_num)
         headers = self._generate_req_headers(auth_ctrl)
 
         data = {
             "q": requests.utils.quote(self._encText(payload))
         }
 
-        res = requests.post(
-            url="https://el.dhlottery.co.kr/game/pension720/process/makeOrderNo.jsp",
+        res = requests.post( 
+            url="https://el.dhlottery.co.kr/game/pension720/process/makeOrderNo.jsp", 
             headers=headers,
             data=data
         )
@@ -86,27 +110,16 @@ class Win720:
 
         return ret['orderNo'], ret['orderDate']
 
-    def _doConnPro(self, auth_ctrl: auth.AuthController, win720_round: str, extracted_num: str, orderNo: str, orderDate: str, cnt: int) -> str:
-        payload = "ROUND={}&FLAG=&BUY_KIND=01&BUY_NO={}&BUY_CNT={}&BUY_SET_TYPE={}&BUY_TYPE={}&CS_TYPE=01&orderNo={}&orderDate={}&TRANSACTION_ID=&WIN_DATE=&USER_ID={}&PAY_TYPE=&resultErrorCode=&resultErrorMsg=&resultOrderNo=&WORKING_FLAG=true&NUM_CHANGE_TYPE=&auto_process=N&set_type=SA&classnum=&selnum=&buytype=M&num1=&num2=&num3=&num4=&num5=&num6=&DSEC=34&CLOSE_DATE=&verifyYN=N&curdeposit=&curpay={}&DROUND={}&DSEC=0&CLOSE_DATE=&verifyYN=N&lotto720_radio_group=on".format(
-            win720_round,
-            "".join(["{}{}%2C".format(i, extracted_num) for i in range(1, cnt + 1)])[:-3],
-            cnt,
-            "%2C".join(["SA"] * cnt),
-            "%2C".join(["A"] * cnt),
-            orderNo,
-            orderDate,
-            "fantazm",
-            1000 * cnt,
-            win720_round
-        )
+    def _doConnPro(self, auth_ctrl: auth.AuthController, win720_round: str, extracted_num: str, orderNo: str, orderDate: str) -> str:
+        payload = "ROUND={}&FLAG=&BUY_KIND=01&BUY_NO={}&BUY_CNT=5&BUY_SET_TYPE=SA%2CSA%2CSA%2CSA%2CSA&BUY_TYPE=A%2CA%2CA%2CA%2CA%2C&CS_TYPE=01&orderNo={}&orderDate={}&TRANSACTION_ID=&WIN_DATE=&USER_ID={}&PAY_TYPE=&resultErrorCode=&resultErrorMsg=&resultOrderNo=&WORKING_FLAG=true&NUM_CHANGE_TYPE=&auto_process=N&set_type=SA&classnum=&selnum=&buytype=M&num1=&num2=&num3=&num4=&num5=&num6=&DSEC=34&CLOSE_DATE=&verifyYN=N&curdeposit=&curpay=5000&DROUND={}&DSEC=0&CLOSE_DATE=&verifyYN=N&lotto720_radio_group=on".format(win720_round,"".join([ "{}{}%2C".format(i,extracted_num) for i in range(1,6)])[:-3],orderNo, orderDate, "fantazm", win720_round)
         headers = self._generate_req_headers(auth_ctrl)
         
         data = {
             "q": requests.utils.quote(self._encText(payload))
         }
         
-        res = requests.post(
-            url="https://el.dhlottery.co.kr/game/pension720/process/connPro.jsp",
+        res = requests.post( 
+            url="https://el.dhlottery.co.kr/game/pension720/process/connPro.jsp", 
             headers=headers,
             data=data
         )
@@ -127,6 +140,7 @@ class Win720:
         return "{}{}{}".format(bytes.hex(encSalt), bytes.hex(encIV), base64.b64encode(aes.encrypt(plainText)).decode('utf-8'))
 
     def _decText(self, encText: str) -> str:
+
         decSalt = bytes.fromhex(encText[0:64])
         decIv = bytes.fromhex(encText[64:96])
         cryptText = encText[96:]
@@ -137,15 +151,20 @@ class Win720:
 
         return self._unpad(aes.decrypt(base64.b64decode(cryptText)).decode('utf-8'))
 
-    def get_balance(self, auth_ctrl: auth.AuthController) -> str:
+    def get_balance(self, auth_ctrl: auth.AuthController) -> str: 
+        
         headers = self._generate_req_headers(auth_ctrl)
-        res = requests.post(
-            url="https://dhlottery.co.kr/userSsl.do?method=myPage",
+        res = requests.post( 
+            url="https://dhlottery.co.kr/userSsl.do?method=myPage", 
             headers=headers
         )
 
-        soup = BS(res.text, "html5lib")
+        html = res.text
+        soup = BS(
+            html, "html5lib"
+        )
         balance = soup.find("p", class_="total_new").find('strong').text
+        print(balance, type(balance))
         return balance
 
     def check_winning(self, auth_ctrl: auth.AuthController) -> dict:
@@ -155,11 +174,11 @@ class Win720:
 
         parameters = self._make_search_date()
         data = {
-            "nowPage": 1,
+            "nowPage": 1, 
             "searchStartDate": parameters["searchStartDate"],
             "searchEndDate": parameters["searchEndDate"],
             "winGrade": 1,
-            "lottoId": "LP72",
+            "lottoId": "LP72", 
             "sortOrder": "DESC"
         }
 
@@ -169,15 +188,21 @@ class Win720:
             data=data
         )
 
-        soup = BS(res.text, "html5lib")
+        html = res.text
+        soup = BS(html, "html5lib")
         
-        winnings = soup.find("table", class_="tbl_data tbl_data_col").find("tbody").find_all("td")
+        winnings = soup.find("table", class_="tbl_data tbl_data_col").find_all("tbody")[0].find_all("td")       
+
+        result_data = {
+            "data": "no winning data"
+        }
+
         if len(winnings) == 1:
-            return {"data": "no winning data"}
+            return result_data
 
         result_data = {
             "round": winnings[2].text.strip(),
-            "money": ",".join([winnings[6 + (i * 8)].text.strip() for i in range(0, int(len(winnings) / 7))]),
+            "money": ",".join([ winnings[6+(i*8)].text.strip() for i in range(0,int(len(winnings)/7))]) ,
             "purchased_date": winnings[0].text.strip(),
             "winning_date": winnings[7].text.strip()
         }
@@ -197,12 +222,11 @@ class Win720:
     def _show_result(self, body: dict) -> None:
         assert type(body) == dict
 
+        print(f"{json.dumps(body)}")
+
         if body.get("loginYn") != "Y":
-            print("로그인 실패")
             return
 
         result = body.get("result", {})
-        if result.get("resultMsg", "FAILURE").upper() == "SUCCESS":
-            print("구매 성공")
-        else:
-            print("구매 실패: " + result.get("resultMsg", "알 수 없는 오류"))
+        if result.get("resultMsg", "FAILURE").upper() != "SUCCESS":    
+            return
