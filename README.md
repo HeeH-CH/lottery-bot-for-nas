@@ -48,27 +48,9 @@ python controller.py buy USERNAME1 lotto 1 2 [1,2,3,4,5,6] [7,8,9,10,11,12]
 
 ```
 
-예시_Win720
-
-```
-# 연금복권 720을 1장 구매:
-python controller.py buy USERNAME1 win720 1 0
-
-```
-
-예시_both
-
-```
-# 로또 645를 2장 자동 + 연금복권 720을 3장 구매:
-python controller.py buy USERNAME1 both 2 0 3
-# 로또 645를 1장 자동 + 1장 수동(번호: [1,2,3,4,5,6]) + 연금복권 720을 3장 구매:
-python controller.py buy USERNAME1 both 1 1 [1,2,3,4,5,6] 3
-
-```
-
 당첨 확인 명령어
 ```
-# 로또 645와 연금복권 720의 당첨 여부 확인:
+# 로또 645 당첨 여부 확인:
 python controller.py check USERNAME1
 
 ```
