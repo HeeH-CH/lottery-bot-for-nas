@@ -118,7 +118,7 @@ class Lotto645:
             "nowPage": 1,
             "searchStartDate": parameters["searchStartDate"],
             "searchEndDate": parameters["searchEndDate"],
-            "winGrade": 2,
+            "winGrade": 1,
             "lottoId": "LO40",
             "sortOrder": "DESC"
         }
