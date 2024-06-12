@@ -1,17 +1,11 @@
 import json
 import datetime
 import requests
+import random
 
-from enum import Enum
 from bs4 import BeautifulSoup as BS
 from datetime import timedelta
 import auth
-
-class Lotto645Mode(Enum):
-    AUTO = 1
-    MANUAL = 2
-    BUY = 10 
-    CHECK = 20
 
 class Lotto645:
     _REQ_HEADERS = {
@@ -32,42 +26,52 @@ class Lotto645:
         "Accept-Language": "ko,en-US;q=0.9,en;q=0.8,ko-KR;q=0.7",
     }
 
-    def buy_lotto645(self, auth_ctrl: auth.AuthController, cnt: int, mode: Lotto645Mode) -> dict:
+    def buy_lotto645(self, auth_ctrl: auth.AuthController, total_count: int, auto_count: int, manual_numbers: list = None) -> dict:
         assert type(auth_ctrl) == auth.AuthController
-        assert type(cnt) == int and 1 <= cnt <= 5
-        assert type(mode) == Lotto645Mode
+        assert type(total_count) == int and 1 <= total_count <= 5
+        assert type(auto_count) == int and 0 <= auto_count <= total_count
 
         headers = self._generate_req_headers(auth_ctrl)
         requirements = self._get_requirements(headers)
 
-        data = self._generate_body_for_auto_mode(cnt, requirements) if mode == Lotto645Mode.AUTO else self._generate_body_for_manual(cnt)
+        if manual_numbers is None:
+            manual_numbers = []
 
+        # Generate random numbers for the automatic slots
+        for _ in range(auto_count):
+            manual_numbers.append(self._generate_random_lotto_numbers())
+
+        data = self._generate_body_for_manual(total_count, requirements, manual_numbers)
         body = self._try_buying(headers, data)
         self._show_result(body)
         return body
 
-    def _generate_req_headers(self, auth_ctrl: auth.AuthController) -> dict:
-        assert type(auth_ctrl) == auth.AuthController
-        return auth_ctrl.add_auth_cred_to_headers(self._REQ_HEADERS)
+    def _generate_random_lotto_numbers(self):
+        return sorted(random.sample(range(1, 46), 6))
 
-    def _generate_body_for_auto_mode(self, cnt: int, requirements: list) -> dict:
-        assert type(cnt) == int and 1 <= cnt <= 5
+    def _generate_body_for_manual(self, total_count: int, requirements: list, manual_numbers: list) -> dict:
+        assert type(total_count) == int and 1 <= total_count <= 5
+        assert type(manual_numbers) == list and all(isinstance(nums, list) and len(nums) == 6 for nums in manual_numbers)
+
+        def format_number(num):
+            return f"{num:02}"
+
         SLOTS = ["A", "B", "C", "D", "E"]
         return {
             "round": self._get_round(),
             "direct": requirements[0],
-            "nBuyAmount": str(1000 * cnt),
+            "nBuyAmount": str(1000 * total_count),
             "param": json.dumps(
-                [{"genType": "0", "arrGameChoiceNum": None, "alpabet": slot} for slot in SLOTS[:cnt]]
+                [{"genType": "1", "arrGameChoiceNum": ",".join(map(format_number, nums)), "alpabet": slot} for nums, slot in zip(manual_numbers, SLOTS[:total_count])]
             ),
             'ROUND_DRAW_DATE': requirements[1],
             'WAMT_PAY_TLMT_END_DT': requirements[2],
-            "gameCnt": cnt
+            "gameCnt": total_count
         }
 
-    def _generate_body_for_manual(self, cnt: int) -> dict:
-        assert type(cnt) == int and 1 <= cnt <= 5
-        raise NotImplementedError("Manual mode is not implemented yet.")
+    def _generate_req_headers(self, auth_ctrl: auth.AuthController) -> dict:
+        assert type(auth_ctrl) == auth.AuthController
+        return auth_ctrl.add_auth_cred_to_headers(self._REQ_HEADERS)
 
     def _get_requirements(self, headers: dict) -> list:
         assert type(headers) == dict
@@ -105,6 +109,7 @@ class Lotto645:
 
         headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
         res = requests.post("https://ol.dhlottery.co.kr/olotto/game/execBuy.do", headers=headers, data=data)
+
         res.encoding = "utf-8"
         return json.loads(res.text)
 
@@ -140,7 +145,7 @@ class Lotto645:
     def _make_search_date(self) -> dict:
         today = datetime.datetime.today()
         today_str = today.strftime("%Y%m%d")
-        weekago = today - timedelta(days=7)
+        weekago = today - timedelta(days=21)
         weekago_str = weekago.strftime("%Y%m%d")
         return {
             "searchStartDate": weekago_str,
