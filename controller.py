@@ -84,8 +84,8 @@ def buy(username_key='USERNAME1', auto_count=0, manual_count=0, manual_numbers=N
     send_message(1, 0, response=response, email_to=email_to)
 
 def run():
-    if len(sys.argv) < 4:
-        print("Usage: python controller.py buy [username1|username2] [auto_count] [manual_count] [manual_numbers...]")
+    if len(sys.argv) < 3:
+        print("Usage: python controller.py [buy|check] [username1|username2] [additional parameters...]")
         return
 
     command = sys.argv[1]
@@ -105,6 +105,8 @@ def run():
         buy(username_key, auto_count, manual_count, manual_numbers)
     elif command == "check":
         check(username_key)
+    else:
+        print("Invalid command. Usage: python controller.py [buy|check] [username1|username2] [additional parameters...]")
 
 if __name__ == "__main__":
     run()
