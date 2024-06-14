@@ -3,7 +3,6 @@ import datetime
 import requests
 import random
 
-from enum import Enum
 from bs4 import BeautifulSoup as BS
 from datetime import timedelta
 import auth
@@ -90,7 +89,7 @@ class Lotto645:
         tlmt_date = soup.find("input", id="WAMT_PAY_TLMT_END_DT").get('value')
 
         return [direct, draw_date, tlmt_date]
-        
+
     def _get_round(self) -> str:
         res = requests.get("https://www.dhlottery.co.kr/common.do?method=main")
         soup = BS(res.text, "html5lib")
