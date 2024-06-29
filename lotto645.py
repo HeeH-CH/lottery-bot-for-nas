@@ -145,7 +145,7 @@ class Lotto645:
     def _make_search_date(self) -> dict:
         today = datetime.datetime.today()
         today_str = today.strftime("%Y%m%d")
-        weekago = today - timedelta(days=21)
+        weekago = today - timedelta(days=7)
         weekago_str = weekago.strftime("%Y%m%d")
         return {
             "searchStartDate": weekago_str,
